@@ -19,12 +19,9 @@ public:
 
 private slots:
     void on_browseInput_clicked();
+    void on_palleteMenu_triggered();
     void on_browseOuput_clicked();
     void on_DitherIT_clicked();
-
-    void on_inputPath_editingFinished();
-
-    void on_outputPath_editingFinished();
 
 private:
     Ui::MainWindow *ui;
@@ -34,6 +31,9 @@ private:
     QString outputPath{};
 
     QImage orderedDither(QImage image, bool color);
+    QRgb nearestColor(QRgb pixel);
+
+    void loadImage(const QString &path);
 
 };
 #endif // MAINWINDOW_H

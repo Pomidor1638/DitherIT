@@ -5,8 +5,9 @@
 #include <QRandomGenerator>
 #include <vector>
 #include <QMessageBox>
+#include "palletedialog.h"
 
-std::vector<std::vector<int>> generateBayerMatrix(int size) {
+std::vector<std::vector<double>> generateBayerMatrix(int size) {
     if (size == 1) {
         return {{0}};
     }
@@ -14,11 +15,11 @@ std::vector<std::vector<int>> generateBayerMatrix(int size) {
     int half = size / 2;
     auto smaller = generateBayerMatrix(half);
 
-    std::vector<std::vector<int>> matrix(size, std::vector<int>(size));
+    std::vector<std::vector<double>> matrix(size, std::vector<double>(size));
 
     for (int i = 0; i < half; ++i) {
         for (int j = 0; j < half; ++j) {
-            int val = smaller[i][j];
+            double val = smaller[i][j];
             matrix[i][j] = 4 * val;
             matrix[i][j + half] = 4 * val + 2;
             matrix[i + half][j] = 4 * val + 3;
@@ -28,12 +29,6 @@ std::vector<std::vector<int>> generateBayerMatrix(int size) {
 
     return matrix;
 }
-
-bool isPowerOfTwo(int n) {
-    return (n & (n - 1)) == 0 && n > 0;
-}
-
-
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -49,17 +44,58 @@ MainWindow::~MainWindow() {
 
 
 
-std::vector<std::vector<int>> createBayerMatrix(int n, float bright = 1.0f) {
+std::vector<std::vector<double>> createBayerMatrix(int n) {
     int size = 1 << n; // 2^n
     auto result = generateBayerMatrix(size);
     int max_val = size * size;
-
-    for (auto& row : result) {
-        for (auto& val : row) {
-            val = (val * 255 * bright) / max_val; // Правильное округление
+    if (n){
+        for (auto& row : result) {
+            for (auto& val : row) {
+                val /= max_val;
+            }
         }
     }
+    else{
+        result[0][0] = 0.5;
+    }
+
     return result;
+}
+
+double colorDistance(QRgb first, QRgb second){
+
+    double r = qRed  (first) - qRed  (second);
+    double g = qGreen(first) - qGreen(second);
+    double b = qBlue (first) - qBlue (second);
+
+    return r*r + g*g + b*b;
+}
+
+QRgb MainWindow::nearestColor(QRgb pixel){
+
+    static const QRgb colors[] = {
+        qRgb(  0,   0,   0),
+        qRgb(  0,   0, 255),
+        qRgb(  0, 255,   0),
+        qRgb(  0, 255, 255),
+        qRgb(255,   0,   0),
+        qRgb(255,   0, 255),
+        qRgb(255, 255,   0),
+        qRgb(255, 255, 255),
+    };
+
+
+    double score = 65536.0;
+    QRgb best = 0;
+
+    for (const auto &x : colors){
+        double cur = colorDistance(pixel, x);
+        if (cur < score){
+            best = x;
+            score = cur;
+        }
+    }
+    return best;
 }
 
 QImage MainWindow::orderedDither(QImage image, bool color) {
@@ -68,8 +104,8 @@ QImage MainWindow::orderedDither(QImage image, bool color) {
 
     int width = image.width();
     int height = image.height();
-    int matrixPower = qBound(0, ui->MatrixNInput->value(), 8);
-    auto bayerMatrix = createBayerMatrix(matrixPower, 1);
+    int matrixPower = qBound(0, ui->MatrixNInput->value(), 11);
+    const auto bayerMatrix = createBayerMatrix(matrixPower);
     int matrixSize = bayerMatrix.size();
 
     float bright = ui->brightInput->value() / 100.0;
@@ -77,20 +113,32 @@ QImage MainWindow::orderedDither(QImage image, bool color) {
     for (int y = 0; y < height; ++y) {
         for (int x = 0; x < width; ++x) {
             QRgb pixel = image.pixel(x, y);
-            int threshold = bayerMatrix[y % matrixSize][x % matrixSize];
-
+            double threshold = 255 * (bayerMatrix[y % matrixSize][x % matrixSize] - 0.5);
             if (color) {
-                int r = (qRed(pixel)   * bright > threshold) ? 255 : 0;
-                int g = (qGreen(pixel) * bright > threshold) ? 255 : 0;
-                int b = (qBlue(pixel)  * bright > threshold) ? 255 : 0;
-                image.setPixel(x, y, qRgb(r, g, b));
+
+                int r = qRed(pixel);
+                int g = qGreen(pixel);
+                int b = qBlue(pixel);
+
+                if (ui->inverseFlag->isChecked()) {
+                    r = 255 - r;
+                    g = 255 - g;
+                    b = 255 - b;
+                }
+
+                r = qBound(0, static_cast<int>(r * bright + threshold), 255);
+                g = qBound(0, static_cast<int>(g * bright + threshold), 255);
+                b = qBound(0, static_cast<int>(b * bright + threshold), 255);
+
+
+
+                image.setPixel(x, y, nearestColor(qRgb(r, g, b)));
+
             } else {
-                int gray = (qGray(pixel) * bright > threshold) ? 255 : 0;
+                int gray = (qGray(pixel) * bright + threshold > 127) != ui->inverseFlag->isChecked() ? 255 : 0;
                 image.setPixel(x, y, qRgb(gray, gray, gray));
             }
         }
-
-        // Обновляем прогресс 1 раз на строку
         if (y % 10 == 0) {
             ui->progressBar->setValue(100 * y / height);
             QApplication::processEvents();
@@ -100,21 +148,48 @@ QImage MainWindow::orderedDither(QImage image, bool color) {
     return image;
 }
 
-void MainWindow::on_browseInput_clicked() {
-    inputPath = QFileDialog::getOpenFileName(
+void MainWindow::on_browseInput_clicked()
+{
+    QString fileName = QFileDialog::getOpenFileName(
         this,
         "Выберите изображение",
         "",
         "Изображения (*.png *.jpg *.jpeg *.bmp)"
-    );
-    ui->inputPath->setText(inputPath);
-    image.load(inputPath);
+        );
 
-    ui->DitherIT->setEnabled(!image.isNull());
-    ui->widthInput->setValue(image.isNull() ? 0 : image.width());
-    ui->heightInput->setValue(image.isNull() ? 0 : image.height());
+    if (!fileName.isEmpty()) {
+        loadImage(fileName);
+    }
 }
 
+void MainWindow::loadImage(const QString &path) {
+
+    ui->DitherIT->setEnabled(false);
+    ui->widthInput->setValue(0);
+    ui->heightInput->setValue(0);
+    ui->inputPath->clear();
+
+    if (!image.load(path)) {
+        QMessageBox::warning(this, "Ошибка", "Не удалось загрузить изображение");
+        return;
+    }
+
+    inputPath = path;
+    ui->inputPath->setText(path);
+    ui->widthInput->setValue(image.width());
+    ui->heightInput->setValue(image.height());
+    ui->DitherIT->setEnabled(true);
+
+    if (ui->graphicsView->scene()) {
+        delete ui->graphicsView->scene();
+    }
+
+    QGraphicsScene* scene = new QGraphicsScene(this);
+    scene->addPixmap(QPixmap::fromImage(image));
+
+    ui->graphicsView->setScene(scene);
+    ui->graphicsView->fitInView(scene->itemsBoundingRect(), Qt::KeepAspectRatio);
+}
 
 
 void MainWindow::on_browseOuput_clicked() {
@@ -127,13 +202,25 @@ void MainWindow::on_browseOuput_clicked() {
     ui->outputPath->setText(outputPath);
 }
 
+void MainWindow::on_palleteMenu_triggered(){
 
+    PalleteDialog dialog(this);
+    dialog.exec();
+
+}
 
 
 
 void MainWindow::on_DitherIT_clicked() {
+
+    //ui->progressBar->setRange(0, 100); // Пока это излишне
+    ui->progressBar->setValue(0);
+    ui->DitherIT->setEnabled(false);
+    QApplication::processEvents(); // Пока не понятно медленная ли эта процедура, но с ней кнопка отключается сразу
+
     if (inputPath.isEmpty() || outputPath.isEmpty()) {
         QMessageBox::warning(this, "Ошибка", "Укажите входной и выходной файлы");
+        ui->DitherIT->setEnabled(true);
         return;
     }
 
@@ -141,13 +228,9 @@ void MainWindow::on_DitherIT_clicked() {
         QMessageBox::critical(this, "Ошибка", "Не удалось загрузить изображение");
         ui->progressBar->setValue(100);
         inputPath.clear();
+        ui->DitherIT->setEnabled(true);
         return;
     }
-
-    ui->DitherIT->setEnabled(false);
-    ui->progressBar->setRange(0, 100);
-    ui->progressBar->setValue(0);
-    QApplication::processEvents();
 
     int targetWidth = ui->widthInput->value();
     int targetHeight = ui->heightInput->value();
@@ -173,15 +256,7 @@ void MainWindow::on_DitherIT_clicked() {
 
     ui->progressBar->setValue(100);
     ui->DitherIT->setEnabled(true);
+    QApplication::processEvents(); // Такая же ситуация что и сверху
 }
 
-
-void MainWindow::on_inputPath_editingFinished() {
-
-}
-
-
-void MainWindow::on_outputPath_editingFinished() {
-
-}
 
