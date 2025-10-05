@@ -5,14 +5,20 @@
 DitherItemWidget::DitherItemWidget(QWidget* parent)
     : QWidget(parent)
 {
+    QHBoxLayout* layout = new QHBoxLayout(this);
+    layout->setContentsMargins(2,2,2,2);
+    layout->setSpacing(4);
 
-    static const int widget_height = 30;
-
-    QHBoxLayout *layout = new QHBoxLayout(this);
     displayLabel = new QLabel(this);
+    displayLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     layout->addWidget(displayLabel);
-    setFixedHeight(widget_height);
+
+    QFontMetrics metrics(displayLabel->font());
+    int h = metrics.height(); // небольшой padding сверху/снизу
+    displayLabel->setFixedHeight(h);
+    setFixedHeight(h);
 }
+
 DitherItemWidget::~DitherItemWidget()
 {
     if (displayLabel)

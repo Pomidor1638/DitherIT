@@ -299,7 +299,7 @@
        <rect>
         <x>10</x>
         <y>10</y>
-        <width>172</width>
+        <width>181</width>
         <height>117</height>
        </rect>
       </property>
@@ -393,11 +393,6 @@
       </layout>
      </widget>
     </widget>
-    <widget class="QWidget" name="FloydTab">
-     <attribute name="title">
-      <string>Floyd</string>
-     </attribute>
-    </widget>
    </widget>
    <widget class="QScrollArea" name="scrollArea">
     <property name="geometry">
@@ -427,7 +422,7 @@
      <rect>
       <x>370</x>
       <y>170</y>
-      <width>82</width>
+      <width>91</width>
       <height>131</height>
      </rect>
     </property>
@@ -490,9 +485,9 @@
    <widget class="QWidget" name="formLayoutWidget_3">
     <property name="geometry">
      <rect>
-      <x>550</x>
+      <x>570</x>
       <y>170</y>
-      <width>161</width>
+      <width>141</width>
       <height>131</height>
      </rect>
     </property>
@@ -586,9 +581,9 @@
    <widget class="QWidget" name="verticalLayoutWidget_4">
     <property name="geometry">
      <rect>
-      <x>461</x>
-      <y>171</y>
-      <width>82</width>
+      <x>470</x>
+      <y>170</y>
+      <width>91</width>
       <height>131</height>
      </rect>
     </property>
