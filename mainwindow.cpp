@@ -112,14 +112,6 @@ void MainWindow::onItemSelectionChanged()
         return;
     }
 
-    // Показываем путь
-    if (outputPath.isEmpty()) {
-#ifdef _DEBUG_
-        qDebug() << "WARNING: item without output path";
-#endif
-        return;
-    }
-
     setOutputPath(outputPath);
 }
 
@@ -352,6 +344,8 @@ void MainWindow::updateCurDitherWidgets()
         ui->orderedColorDepthSpinBox->setValue(od->getColorDepth());
         ui->orderedThresholdSpinBox->setValue(od->getThreshold() * 100.0f);
         ui->orderedLevelSpinBox->setValue(od->getLevel());
+
+        qDebug() << od->getLevel();
 
         ui->orderedColorDepthSpinBox->blockSignals(false);
         ui->orderedThresholdSpinBox->blockSignals(false);

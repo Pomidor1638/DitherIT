@@ -1,64 +1,54 @@
 #include "orderedDithering.h"
 
-float* generateBayerMatrix(int level)
+float* generateBayerMatrix(int size)
 {
-    if (level <= 1) {
-        float* ptr = new float[1];
-        ptr[0] = 0;
-        return ptr;
-    }
-
-    if (level == 1)
+    if (size == 1)
     {
-        float* ptr = new float[1];
-        ptr[0] = 0;
+        float* ptr = new float[1]{0.0f};
         return ptr;
     }
 
-    const int half = level >> 1;
+    int half = size / 2;
     float* smaller = generateBayerMatrix(half);
-    float* matrix = new float[level * level];
+    float* matrix = new float[size * size];
 
     for (int i = 0; i < half; ++i)
     {
         for (int j = 0; j < half; ++j)
         {
-            const float v = 4 * smaller[i * half + j];  // Исправлено: i * half + j
-
-            matrix[i * level + j] = v;
-            matrix[i * level + j + half] = v + 2;
-            matrix[(i + half) * level + j] = v + 3;
-            matrix[(i + half) * level + j + half] = v + 1;
+            float v = 4 * smaller[i * half + j];
+            matrix[i * size + j] = v;
+            matrix[i * size + j + half] = v + 2;
+            matrix[(i + half) * size + j] = v + 3;
+            matrix[(i + half) * size + j + half] = v + 1;
         }
     }
 
-    delete[] smaller;  // Не забываем освободить память!
+    delete[] smaller;
     return matrix;
 }
 
+
 void BayerMatrix::setLevel(int input_level)
 {
-    // Освобождаем старую память
     delete[] matrix_ptr;
+    matrix_ptr = nullptr;
 
-    int matrix_size = 1 << input_level;  // 2^input_level
-    this->level = matrix_size;  // Сохраняем реальный размер матрицы
-    this->matrix_ptr = generateBayerMatrix(matrix_size);
+    level = input_level;
+    int size = 1 << input_level;  // реальный размер
 
-    if (!matrix_ptr) return;
+    matrix_ptr = generateBayerMatrix(size);
+    if (!matrix_ptr)
+        return;
 
-    float max = matrix_ptr[0];
-    for (int i = 1; i < matrix_size * matrix_size; i++) {
-        max = std::max(max, matrix_ptr[i]);
-    }
+    float N2 = size * size - 1.0f;
 
-    max *= 2;
+    if (N2)
+        for (int i = 0; i < size * size; ++i)
+            matrix_ptr[i] = matrix_ptr[i] / N2 - 0.5f;
 
-    for (int i = 0; i < matrix_size * matrix_size; i++) {
-        matrix_ptr[i] /= max;
-        matrix_ptr[i] -= 0.25f;
-    }
 }
+
 
 int BayerMatrix::getLevel() const
 {
@@ -67,7 +57,8 @@ int BayerMatrix::getLevel() const
 
 float* BayerMatrix::operator[](int k) const
 {
-    return &matrix_ptr[k*level];
+    int size = (1 << level);
+    return &matrix_ptr[k*size];
 }
 
 BayerMatrix::BayerMatrix() :

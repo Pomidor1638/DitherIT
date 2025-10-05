@@ -3,12 +3,7 @@
 
 QImage OrderedDithering::ditherImage(const QImage& image)
 {
-    const int level = matrix.getLevel();
-
-    if (!level)
-    {
-        return QImage{};
-    }
+    const int size = 1 << matrix.getLevel();
 
     QImage result = image.convertToFormat(QImage::Format_ARGB32).scaled(res_width, res_height, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
 
@@ -22,13 +17,13 @@ QImage OrderedDithering::ditherImage(const QImage& image)
 
     for (int y = 0; y < result.height(); y++)
     {
-        const int matrix_y = y % level;
+        const int matrix_y = y % size;
         float* matrix_row = matrix[matrix_y];
 
         for (int x = 0; x < result.width(); x++)
         {
             const QRgb pixel = result.pixel(x, y);
-            const float thres = threshold * matrix_row[x % level] * 255.0f;
+            const float thres = threshold * matrix_row[x % size] * 255.0f;
 
             const int alpha = hasAlpha ? qAlpha(pixel) : 255;
 
@@ -89,7 +84,8 @@ OrderedDithering::OrderedDithering() :
     IDither(),
     colour_depth(0),
     threshold(1.0f),
-    matrix()
+    matrix(),
+    invert(0)
 {
 
 }
@@ -103,11 +99,13 @@ OrderedDithering::OrderedDithering(
     bool inverse,
     int colour_depth,
     float threshold,
+    bool invert,
     int level)
-    : IDither(res_width, res_height, res_brightness, res_contrast, colour, inverse),
-    colour_depth(colour_depth),
-    threshold(threshold),
-    matrix(level)
+    : IDither(res_width, res_height, res_brightness, res_contrast, colour, inverse)
+    , colour_depth(colour_depth)
+    , threshold(threshold)
+    , matrix(level)
+    , invert(0)
 {
 
 }

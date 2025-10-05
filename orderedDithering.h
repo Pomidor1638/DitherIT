@@ -28,12 +28,13 @@ class OrderedDithering : public IDither {
 private:
     int colour_depth;
     float threshold;
+    bool invert;
     BayerMatrix matrix;
 
 public:
     OrderedDithering();
     OrderedDithering(int res_width, int res_height, float res_brightness, float res_contrast,
-                     bool colour, bool inverse, int colour_depth, float threshold, int level);
+                     bool colour, bool inverse, int colour_depth, float threshold, bool invert, int level);
     ~OrderedDithering();
 
     OrderedDithering(const OrderedDithering& other);
@@ -55,6 +56,9 @@ public:
 
     int getLevel() const;
     void setLevel(int level);
+
+    bool getInvert() const;
+    void setInvert(bool i);
 
     IDither* copy() const override;
 };
