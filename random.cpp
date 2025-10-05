@@ -1,7 +1,5 @@
 #include "random.h"
-#include <QDebug>
 
-#define _DEBUG_
 
 QImage RandomDithering::ditherImage(const QImage& image)
 {

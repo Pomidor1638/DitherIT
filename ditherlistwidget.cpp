@@ -22,10 +22,12 @@ void setDitherDefaults(IDither* dither, QSize size)
     dither->setColour(true);
     dither->setInverse(false);
 
+#ifdef _DEBUG
     if (dither->getWidth() == 1 || dither->getHeight() == 1)
     {
         qDebug() << "WARNING: " << __func__ << " - invalid img sizes";
     }
+#endif
 
     switch(dither->getDitherType())
     {

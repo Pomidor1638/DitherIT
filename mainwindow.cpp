@@ -3,7 +3,7 @@
 #include "orderedDithering.h"
 #include "random.h"
 
-#define _DEBUG_
+//#define _DEBUG_
 
 void MainWindow::disableForseWidgets()
 {

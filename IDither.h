@@ -1,6 +1,12 @@
 #ifndef _IDITHER_H_
 #define _IDITHER_H_
 
+//#define _DEBUG_
+
+#ifdef _DEBUG_
+#include <QDebug>
+#endif
+
 #include <QImage>
 #include <QString>
 
