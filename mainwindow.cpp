@@ -1,262 +1,651 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
-#include <QFileDialog>
-#include <QImage>
-#include <QRandomGenerator>
-#include <vector>
-#include <QMessageBox>
-#include "palletedialog.h"
+#include "orderedDithering.h"
+#include "random.h"
 
-std::vector<std::vector<double>> generateBayerMatrix(int size) {
-    if (size == 1) {
-        return {{0}};
-    }
+#define _DEBUG_
 
-    int half = size / 2;
-    auto smaller = generateBayerMatrix(half);
-
-    std::vector<std::vector<double>> matrix(size, std::vector<double>(size));
-
-    for (int i = 0; i < half; ++i) {
-        for (int j = 0; j < half; ++j) {
-            double val = smaller[i][j];
-            matrix[i][j] = 4 * val;
-            matrix[i][j + half] = 4 * val + 2;
-            matrix[i + half][j] = 4 * val + 3;
-            matrix[i + half][j + half] = 4 * val + 1;
-        }
-    }
-
-    return matrix;
+void MainWindow::disableForseWidgets()
+{
+    ui->forseParamsButton->setEnabled(false);
+    ui->forseSizeButton->setEnabled(false);
+    //ui->browseOutput->setEnabled(false);
 }
+void MainWindow::enableForseWidgets()
+{
+    ui->forseParamsButton->setEnabled(true);
+    ui->forseSizeButton->setEnabled(true);
+    //ui->browseOutput->setEnabled(true);
+}
+
+void MainWindow::initValues()
+{
+
+    ui->setupUi(this);
+
+    listWidget = new DitherListWidget(this);
+    listWidget->setMinimumWidth(300);
+    ui->scrollArea->setWidget(listWidget);
+
+    scene = new QGraphicsScene(this);
+    ui->graphicsView->setScene(scene);
+
+    updateCurDither();
+}
+
+IDither* ditherByIndex(int index)
+{
+
+    switch (index) {
+    case DITHERING_RANDOM:
+        return new RandomDithering;
+    case DITHERING_ORDERED:
+        return new OrderedDithering;
+    default:
+        break;
+    }
+    return nullptr;
+}
+
+void MainWindow::onItemSelectionChanged()
+{
+    QList<QListWidgetItem*> selectedItems = listWidget->selectedItems();
+    int selectedCount = selectedItems.count();
+#ifdef _DEBUG_
+    qDebug() << "Selected items:" << selectedCount;
+#endif
+    setCurDither(nullptr);
+    curItemWidget = nullptr;
+    clearCurImage();
+    clearPathLabel();
+
+    disableForseWidgets();
+
+    if (selectedCount == 0) {
+        return;
+    }
+
+    if (selectedCount > 1) {
+        enableForseWidgets();
+        const int index = ui->tabWidget->currentIndex();
+        setCurDither(std::shared_ptr<IDither>(ditherByIndex(index)));
+        return;
+    }
+
+    DitherItemWidget* item = listWidget->currentDitherItem();
+    if (!item) {
+#ifdef _DEBUG_
+        qDebug() << "No current item widget";
+#endif
+        return;
+    }
+
+    curItemWidget = item;
+
+    std::shared_ptr<IDither> d = item->getDither().lock();
+
+    if (!d) {
+
+#ifdef _DEBUG_
+        qDebug() << "WARNING: Item without dither";
+
+#endif
+        return;
+    }
+
+    setCurDither(d);
+
+    QImage image = item->getImage();
+    if (image.isNull()) {
+
+#ifdef _DEBUG_
+        qDebug() << "WARNING: Item without image";
+#endif
+        return;
+    }
+
+    if (!setCurImage(image)) {
+
+#ifdef _DEBUG_
+        qDebug() << "WARNING: Can't load item image";
+#endif
+        return;
+    }
+
+    // Показываем путь
+    if (outputPath.isEmpty()) {
+#ifdef _DEBUG_
+        qDebug() << "WARNING: item without output path";
+#endif
+        return;
+    }
+
+    setOutputPath(outputPath);
+}
+
+void MainWindow::connectSlots()
+{
+    // Imgs lists
+    connect(listWidget, &DitherListWidget::itemSelectionChanged, this, &MainWindow::onItemSelectionChanged);
+
+    // Dither params
+
+    // common params
+    connect(ui->  widthSpinBox,  QOverload<   int>::of(&QSpinBox::      valueChanged), this, &MainWindow::updateCommonParams);
+    connect(ui->  heightSpinBox, QOverload<   int>::of(&QSpinBox::      valueChanged), this, &MainWindow::updateCommonParams);
+    connect(ui->  brightSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MainWindow::updateCommonParams);
+    connect(ui->contrastSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MainWindow::updateCommonParams);
+    connect(ui->     colourFlag, &QCheckBox::toggled, this, &MainWindow::updateCommonParams);
+    connect(ui->    inverseFlag, &QCheckBox::toggled, this, &MainWindow::updateCommonParams);
+
+    // ordered params
+    connect(ui->orderedColorDepthSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this, &MainWindow::updateOrderedPararms);
+    connect(ui->orderedLevelSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this, &MainWindow::updateOrderedPararms);
+    connect(ui->orderedThresholdSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MainWindow::updateOrderedPararms);
+
+    connect(ui->randomColorDepthSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this, &MainWindow::updateRandomPararms);
+    connect(ui->randomThresholdSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MainWindow::updateRandomPararms);
+
+    // Dither Type
+    connect(ui->tabWidget, &QTabWidget::currentChanged, this, &::MainWindow::updateCurDither);
+}
+
+
+
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
+    , listWidget(nullptr)
+    , curItemWidget(nullptr)
+    , curDither(nullptr)
+    , scene(nullptr)
 {
-    ui->setupUi(this);
+    initValues();
+    connectSlots();
+    onItemSelectionChanged();
 }
 
-MainWindow::~MainWindow() {
+MainWindow::~MainWindow()
+{
     delete ui;
 }
 
-
-
-
-std::vector<std::vector<double>> createBayerMatrix(int n) {
-    int size = 1 << n; // 2^n
-    auto result = generateBayerMatrix(size);
-    int max_val = size * size;
-    if (n){
-        for (auto& row : result) {
-            for (auto& val : row) {
-                val /= max_val;
-            }
-        }
-    }
-    else{
-        result[0][0] = 0.5;
-    }
-
-    return result;
-}
-
-double colorDistance(QRgb first, QRgb second){
-
-    double r = qRed  (first) - qRed  (second);
-    double g = qGreen(first) - qGreen(second);
-    double b = qBlue (first) - qBlue (second);
-
-    return r*r + g*g + b*b;
-}
-
-QRgb MainWindow::nearestColor(QRgb pixel){
-
-    static const QRgb colors[] = {
-        qRgb(  0,   0,   0),
-        qRgb(  0,   0, 255),
-        qRgb(  0, 255,   0),
-        qRgb(  0, 255, 255),
-        qRgb(255,   0,   0),
-        qRgb(255,   0, 255),
-        qRgb(255, 255,   0),
-        qRgb(255, 255, 255),
-    };
-
-
-    double score = 65536.0;
-    QRgb best = 0;
-
-    for (const auto &x : colors){
-        double cur = colorDistance(pixel, x);
-        if (cur < score){
-            best = x;
-            score = cur;
-        }
-    }
-    return best;
-}
-
-QImage MainWindow::orderedDither(QImage image, bool color) {
-    image = color ? image.convertToFormat(QImage::Format_ARGB32)
-                 : image.convertToFormat(QImage::Format_Grayscale8);
-
-    int width = image.width();
-    int height = image.height();
-    int matrixPower = qBound(0, ui->MatrixNInput->value(), 11);
-    const auto bayerMatrix = createBayerMatrix(matrixPower);
-    int matrixSize = bayerMatrix.size();
-
-    float bright = ui->brightInput->value() / 100.0;
-
-    for (int y = 0; y < height; ++y) {
-        for (int x = 0; x < width; ++x) {
-            QRgb pixel = image.pixel(x, y);
-            double threshold = 255 * (bayerMatrix[y % matrixSize][x % matrixSize] - 0.5);
-            if (color) {
-
-                int r = qRed(pixel);
-                int g = qGreen(pixel);
-                int b = qBlue(pixel);
-
-                if (ui->inverseFlag->isChecked()) {
-                    r = 255 - r;
-                    g = 255 - g;
-                    b = 255 - b;
-                }
-
-                r = qBound(0, static_cast<int>(r * bright + threshold), 255);
-                g = qBound(0, static_cast<int>(g * bright + threshold), 255);
-                b = qBound(0, static_cast<int>(b * bright + threshold), 255);
-
-
-
-                image.setPixel(x, y, nearestColor(qRgb(r, g, b)));
-
-            } else {
-                int gray = (qGray(pixel) * bright + threshold > 127) != ui->inverseFlag->isChecked() ? 255 : 0;
-                image.setPixel(x, y, qRgb(gray, gray, gray));
-            }
-        }
-        if (y % 10 == 0) {
-            ui->progressBar->setValue(100 * y / height);
-            QApplication::processEvents();
-        }
-    }
-
-    return image;
-}
-
-void MainWindow::on_browseInput_clicked()
+bool MainWindow::setCurImage(const QImage& image)
 {
-    QString fileName = QFileDialog::getOpenFileName(
+    clearCurImage();
+    if (image.isNull())
+        return false;
+
+    QPixmap pixmap = QPixmap::fromImage(image);
+
+    scene->addPixmap(pixmap);
+    scene->setSceneRect(pixmap.rect());
+
+    ui->graphicsView->fitInView(scene->sceneRect(), Qt::KeepAspectRatio);
+
+    return true;
+}
+
+std::weak_ptr<IDither> MainWindow::getCurDither() const
+{
+    return std::weak_ptr<IDither>(curDither);
+}
+
+
+
+void MainWindow::updateCommonParams()
+{
+    if (!curDither) {
+#ifdef _DEBUG_
+        qDebug() << "WARNING: " << __func__ << " - curDither is nullptr ";
+#endif
+        return;
+    }
+
+    CommonParams params;
+    params.width = ui->widthSpinBox->value();
+    params.height = ui->heightSpinBox->value();
+    params.brightness = ui->brightSpinBox->value() / 100.0f;
+    params.contrast = ui->contrastSpinBox->value() / 100.0f;
+    params.colour = ui->colourFlag->isChecked();
+    params.inverse = ui->inverseFlag->isChecked();
+
+    curDither->setCommonParams(params);
+}
+
+
+void MainWindow::updateRandomPararms()
+{
+    std::shared_ptr<RandomDithering> rand = std::dynamic_pointer_cast<RandomDithering>(curDither);
+
+    if (!rand)
+    {
+
+#ifdef _DEBUG_
+        qDebug() << "ERROR: " << __func__ << " - can't cast cur dither to RandomDithering";
+#endif
+        return;
+    }
+
+    if (ui->tabWidget->currentIndex() != DITHERING_RANDOM)
+    {
+#ifdef _DEBUG_
+        qDebug() << "WARNING: " << __func__ << " - wrong tab for RandomDithering";
+#endif
+        return;
+    }
+
+    rand->setColorDepth(ui->randomColorDepthSpinBox->value());
+    rand->setThreshold(ui->randomThresholdSpinBox->value() / 100.0f);
+}
+// void MainWindow::updateFloydPararms()
+// {
+
+// }
+
+void MainWindow::updateOrderedPararms()
+{
+    std::shared_ptr<OrderedDithering> od = std::dynamic_pointer_cast<OrderedDithering>(curDither);
+
+    if (!od)
+    {
+
+#ifdef _DEBUG_
+        qDebug() << "ERROR: " << __func__ << " - can't cast cur dither to OrderedDithering";
+#endif
+        return;
+    }
+
+    if (ui->tabWidget->currentIndex() != DITHERING_ORDERED)
+    {
+#ifdef _DEBUG_
+        qDebug() << "WARNING: " << __func__ << " - wrong tab for OrderedDithering";
+#endif
+        return;
+    }
+
+    od->setColorDepth(ui->orderedColorDepthSpinBox->value());
+    od->setThreshold(ui->orderedThresholdSpinBox->value() / 100.0f);
+    od->setLevel(ui->orderedLevelSpinBox->value());
+
+}
+
+void MainWindow::updateCurDither()
+{
+    const int index = ui->tabWidget->currentIndex();
+    DitheringType newType = static_cast<DitheringType>(index);
+
+    CommonParams commonParams;
+    if (curDither) {
+        commonParams = curDither->getCommonParams();
+    }
+
+    auto newDither = std::shared_ptr<IDither>(ditherByIndex(index));
+    if (!newDither)
+        return;
+
+    newDither->setCommonParams(commonParams);
+
+    if (curItemWidget) {
+        curItemWidget->setDither(newDither);
+    }
+
+    setCurDither(newDither);
+
+    switch (newType) {
+    case DITHERING_RANDOM:
+        updateRandomPararms();
+        break;
+    case DITHERING_ORDERED:
+        updateOrderedPararms();
+        break;
+    default:
+        break;
+    }
+}
+
+
+void MainWindow::updateCurDitherWidgets()
+{
+    if (!curDither) {
+        return;
+    }
+
+    CommonParams params = curDither->getCommonParams();
+
+    ui->widthSpinBox->blockSignals(true);
+    ui->heightSpinBox->blockSignals(true);
+    ui->brightSpinBox->blockSignals(true);
+    ui->contrastSpinBox->blockSignals(true);
+    ui->colourFlag->blockSignals(true);
+    ui->inverseFlag->blockSignals(true);
+
+    ui->widthSpinBox->setValue(params.width);
+    ui->heightSpinBox->setValue(params.height);
+    ui->brightSpinBox->setValue(params.brightness * 100.0f);
+    ui->contrastSpinBox->setValue(params.contrast * 100.0f);
+    ui->colourFlag->setCheckState(params.colour ? Qt::Checked : Qt::Unchecked);
+    ui->inverseFlag->setCheckState(params.inverse ? Qt::Checked : Qt::Unchecked);
+
+    ui->widthSpinBox->blockSignals(false);
+    ui->heightSpinBox->blockSignals(false);
+    ui->brightSpinBox->blockSignals(false);
+    ui->contrastSpinBox->blockSignals(false);
+    ui->colourFlag->blockSignals(false);
+    ui->inverseFlag->blockSignals(false);
+
+    switch (curDither->getDitherType()) {
+    case DITHERING_ORDERED: {
+        std::shared_ptr<OrderedDithering> od = std::dynamic_pointer_cast<OrderedDithering>(curDither);
+        if (!od) {
+#ifdef _DEBUG_
+            qDebug() << "ERROR: " << __func__ << " - can't cast " << curDither->getDitherName();
+#endif
+            return;
+        }
+
+        ui->orderedColorDepthSpinBox->blockSignals(true);
+        ui->orderedThresholdSpinBox->blockSignals(true);
+        ui->orderedLevelSpinBox->blockSignals(true);
+
+        ui->orderedColorDepthSpinBox->setValue(od->getColorDepth());
+        ui->orderedThresholdSpinBox->setValue(od->getThreshold() * 100.0f);
+        ui->orderedLevelSpinBox->setValue(od->getLevel());
+
+        ui->orderedColorDepthSpinBox->blockSignals(false);
+        ui->orderedThresholdSpinBox->blockSignals(false);
+        ui->orderedLevelSpinBox->blockSignals(false);
+
+        break;
+    }
+    case DITHERING_RANDOM: {
+        std::shared_ptr<RandomDithering> rd = std::dynamic_pointer_cast<RandomDithering>(curDither);
+        if (!rd) {
+#ifdef _DEBUG_
+            qDebug() << "ERROR: " << __func__ << " - can't cast " << curDither->getDitherName();
+#endif
+            return;
+        }
+
+        ui->randomColorDepthSpinBox->blockSignals(true);
+        ui->randomThresholdSpinBox->blockSignals(true);
+
+        ui->randomColorDepthSpinBox->setValue(rd->getColorDepth());
+        ui->randomThresholdSpinBox->setValue(rd->getThreshold() * 100.0f);
+
+        ui->randomColorDepthSpinBox->blockSignals(false);
+        ui->randomThresholdSpinBox->blockSignals(false);
+
+        break;
+    }
+    default:
+        break;
+    }
+}
+
+void MainWindow::setCurDither(std::shared_ptr<IDither> dither)
+{
+    if (curDither == dither) {
+        return;
+    }
+
+    curDither = dither;
+
+    if (!dither) {
+#ifdef _DEBUG_
+        qDebug() << "ERROR: " << __func__ << " - dither is nullptr";
+#endif
+        return;
+    }
+
+    updateCurDitherWidgets();
+}
+
+bool MainWindow::clearCurImage()
+{
+    if (scene)
+    {
+        scene->clear();
+        return true;
+    }
+    return false;
+}
+
+
+void MainWindow::on_addButton_clicked()
+{
+
+    QStringList inputs = QFileDialog::getOpenFileNames(this, "Выбрать изображения");
+
+    for (const QString& input : inputs) {
+        listWidget->addDitherItem(input, ditherByIndex(ui->tabWidget->currentIndex()));
+    }
+
+    ui->imgsCountLabel->setText(QString("Images: %1").arg(listWidget->count()));
+}
+
+void MainWindow::on_deleteButton_clicked()
+{
+    QList<QListWidgetItem*> marked = listWidget->selectedItems();
+
+    if (marked.isEmpty())
+        return;
+
+    for (QListWidgetItem* item : marked) {
+        delete listWidget->takeItem(listWidget->row(item));
+    }
+
+    ui->imgsCountLabel->setText(QString("Images: %1").arg(listWidget->count()));
+}
+
+void MainWindow::onDitherItemAddError(const QString& input) {
+    QMessageBox::information(this, "Error", "Can't load " + input);
+}
+
+void MainWindow::on_selectAllButton_clicked()
+{
+    if (!listWidget)
+        return;
+
+    QItemSelectionModel* selectionModel = listWidget->selectionModel();
+    bool hasSelectedItems = selectionModel->hasSelection();
+
+    if (hasSelectedItems)
+    {
+        selectionModel->clearSelection();
+    } else
+    {
+        selectionModel->select(QItemSelection(
+                                   listWidget->model()->index(0, 0),
+                                   listWidget->model()->index(listWidget->count() - 1, 0)
+                                   ), QItemSelectionModel::Select);
+    }
+}
+
+void MainWindow::on_DitherIT_clicked()
+{
+
+    ui->DitherIT->setEnabled(false);
+
+
+    if (outputPath.isEmpty())
+    {
+        QMessageBox::warning(this, "Error", "Set output path");
+        ui->DitherIT->setEnabled(true);
+        return;
+    }
+
+
+
+    ui->currentImageProgressBar->setRange(0, 100);
+    ui->commonProgressBar->setRange(0, 100);
+
+    ui->currentImageProgressBar->setValue(0);
+    ui->commonProgressBar->setValue(0);
+
+    size_t count = 0;
+    size_t common = listWidget->count();
+
+    if(!common)
+    {
+        ui->DitherIT->setEnabled(true);
+        return;
+    }
+
+    for (QListWidgetItem* item : listWidget->findItems("*", Qt::MatchWildcard)) {
+
+        DitherItemWidget* widget = qobject_cast<DitherItemWidget*>(listWidget->itemWidget(item));
+
+        if (!widget)
+            continue;
+
+        if (widget->getDither().expired())
+        {
+#ifdef _DEBUG_
+            qDebug() << "WARNING: " << __func__ << " - item without dither";
+#endif
+            continue;
+        }
+
+
+        QImage image = widget->getDither().lock()->ditherImage(widget->getImage());
+        count++;
+
+        //setCurImage(image);
+
+        ui->commonProgressBar->setValue(100.0f * count / common);
+
+
+
+        QString fullPath = QDir(outputPath).filePath(widget->getFilename() + ".png");
+
+        if (!image.save(fullPath, "PNG")) {
+            QMessageBox::warning(this, "Error",
+                                 QString("Can't save image as PNG to %1.\nError: %2")
+                                     .arg(fullPath)
+                                     .arg(image.isNull() ? "Image is null" : "Save failed"));
+        }
+
+        QCoreApplication::processEvents();
+    }
+
+    ui->currentImageProgressBar->setValue(100);
+    ui->commonProgressBar->setValue(100);
+
+    //clearCurImage();
+
+    ui->DitherIT->setEnabled(true);
+
+}
+
+void MainWindow::setOutputPath(const QString& s)
+{
+    outputPath = s;
+    ui->outputPath->setText(s);
+}
+void MainWindow::clearPathLabel()
+{
+    ui->outputPath->clear();
+}
+
+
+void MainWindow::on_forseParamsButton_clicked()
+{
+    if (!curDither) {
+        return;
+    }
+
+    disableForseWidgets();
+
+    const CommonParams& sourceParams = curDither->getCommonParams();
+
+    const int itemCount = listWidget->count();
+    for (int i = 0; i < itemCount; ++i) {
+        QListWidgetItem* listItem = listWidget->item(i);
+        if (!listItem) {
+            continue;
+        }
+
+        DitherItemWidget* itemWidget = qobject_cast<DitherItemWidget*>(
+            listWidget->itemWidget(listItem));
+        if (!itemWidget) {
+            continue;
+        }
+
+        auto ditherPtr = itemWidget->getDither().lock();
+        if (!ditherPtr) {
+            continue;
+        }
+
+        const CommonParams originalParams = ditherPtr->getCommonParams();
+        const int originalWidth = originalParams.width;
+        const int originalHeight = originalParams.height;
+
+        CommonParams newParams = sourceParams;
+        newParams.width = originalWidth;
+        newParams.height = originalHeight;
+
+        std::shared_ptr<IDither> ditherCopy(curDither->copy());
+        ditherCopy->setCommonParams(newParams);
+
+        itemWidget->setDither(ditherCopy);
+    }
+
+    enableForseWidgets();
+}
+
+void MainWindow::on_browseOutput_clicked()
+{
+    QString folderPath = QFileDialog::getExistingDirectory(
         this,
-        "Выберите изображение",
-        "",
-        "Изображения (*.png *.jpg *.jpeg *.bmp)"
+        tr("Выберите папку для сохранения изображений"),
+        QDir::homePath(),
+        QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks
         );
 
-    if (!fileName.isEmpty()) {
-        loadImage(fileName);
+    if (!folderPath.isEmpty())
+    {
+        setOutputPath(folderPath);
     }
 }
 
-void MainWindow::loadImage(const QString &path) {
 
-    ui->DitherIT->setEnabled(false);
-    ui->widthInput->setValue(0);
-    ui->heightInput->setValue(0);
-    ui->inputPath->clear();
-
-    if (!image.load(path)) {
-        QMessageBox::warning(this, "Ошибка", "Не удалось загрузить изображение");
+void MainWindow::on_forseSizeButton_clicked()
+{
+    if (!curDither) {
         return;
     }
 
-    inputPath = path;
-    ui->inputPath->setText(path);
-    ui->widthInput->setValue(image.width());
-    ui->heightInput->setValue(image.height());
-    ui->DitherIT->setEnabled(true);
+    disableForseWidgets();
 
-    if (ui->graphicsView->scene()) {
-        delete ui->graphicsView->scene();
-    }
+    const CommonParams& sourceParams = curDither->getCommonParams();
+    const int targetWidth = sourceParams.width;
+    const int targetHeight = sourceParams.height;
 
-    QGraphicsScene* scene = new QGraphicsScene(this);
-    scene->addPixmap(QPixmap::fromImage(image));
-
-    ui->graphicsView->setScene(scene);
-    ui->graphicsView->fitInView(scene->itemsBoundingRect(), Qt::KeepAspectRatio);
-}
-
-
-void MainWindow::on_browseOuput_clicked() {
-     outputPath = QFileDialog::getSaveFileName(
-        this,
-        "Сохраните изображение",
-        "",
-        "Изображения (*.png *.jpg *.jpeg *.bmp)"
-    );
-    ui->outputPath->setText(outputPath);
-}
-
-void MainWindow::on_palleteMenu_triggered(){
-
-    PalleteDialog dialog(this);
-    dialog.exec();
-
-}
-
-
-
-void MainWindow::on_DitherIT_clicked() {
-
-    //ui->progressBar->setRange(0, 100); // Пока это излишне
-    ui->progressBar->setValue(0);
-    ui->DitherIT->setEnabled(false);
-    QApplication::processEvents(); // Пока не понятно медленная ли эта процедура, но с ней кнопка отключается сразу
-
-    if (inputPath.isEmpty() || outputPath.isEmpty()) {
-        QMessageBox::warning(this, "Ошибка", "Укажите входной и выходной файлы");
-        ui->DitherIT->setEnabled(true);
-        return;
-    }
-
-    if (!image.load(inputPath)) {
-        QMessageBox::critical(this, "Ошибка", "Не удалось загрузить изображение");
-        ui->progressBar->setValue(100);
-        inputPath.clear();
-        ui->DitherIT->setEnabled(true);
-        return;
-    }
-
-    int targetWidth = ui->widthInput->value();
-    int targetHeight = ui->heightInput->value();
-
-    if (targetWidth > 0 && targetHeight > 0) {
-        image = image.scaled(targetWidth, targetHeight,
-                             Qt::IgnoreAspectRatio,
-                             Qt::SmoothTransformation);
-    }
-
-    bool useColor = ui->colorFlag->isChecked();
-
-    try {
-        image = orderedDither(image, useColor);
-
-        if (!image.save(outputPath)) {
-            throw std::runtime_error("Ошибка сохранения файла");
+    const int itemCount = listWidget->count();
+    for (int i = 0; i < itemCount; ++i) {
+        QListWidgetItem* listItem = listWidget->item(i);
+        if (!listItem) {
+            continue;
         }
-    }
-    catch (const std::exception& e) {
-        QMessageBox::critical(this, "Ошибка", e.what());
+
+        DitherItemWidget* itemWidget = qobject_cast<DitherItemWidget*>(
+            listWidget->itemWidget(listItem));
+        if (!itemWidget) {
+            continue;
+        }
+
+        auto ditherPtr = itemWidget->getDither().lock();
+        if (!ditherPtr) {
+            continue;
+        }
+
+        CommonParams params = ditherPtr->getCommonParams();
+        params.width = targetWidth;
+        params.height = targetHeight;
+        ditherPtr->setCommonParams(params);
     }
 
-    ui->progressBar->setValue(100);
-    ui->DitherIT->setEnabled(true);
-    QApplication::processEvents(); // Такая же ситуация что и сверху
+    enableForseWidgets();
 }
-
-

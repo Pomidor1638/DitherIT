@@ -9,13 +9,23 @@ CONFIG += c++17
 #DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x060000    # disables all the APIs deprecated before Qt 6.0.0
 
 SOURCES += \
+    bayermatrix.cpp \
+    dither_item.cpp \
+    ditherlistwidget.cpp \
     main.cpp \
     mainwindow.cpp \
-    palletedialog.cpp
+    ordered.cpp \
+    palletedialog.cpp \
+    random.cpp
 
 HEADERS += \
+    IDither.h \
+    dither_item.h \
+    ditherlistwidget.h \
     mainwindow.h \
-    palletedialog.h
+    orderedDithering.h \
+    palletedialog.h \
+    random.h
 
 FORMS += \
     mainwindow.ui \
@@ -25,3 +35,6 @@ FORMS += \
 qnx: target.path = /tmp/$${TARGET}/bin
 else: unix:!android: target.path = /opt/$${TARGET}/bin
 !isEmpty(target.path): INSTALLS += target
+
+DISTFILES += \
+    style.qss

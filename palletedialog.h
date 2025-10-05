@@ -7,13 +7,15 @@ namespace Ui {
 class PalleteDialog;
 }
 
-class PalleteDialog : public QDialog
-{
+class PalleteDialog : public QDialog {
     Q_OBJECT
 
 public:
     explicit PalleteDialog(QWidget *parent = nullptr);
     ~PalleteDialog();
+
+    void fillScrollArea(std::vector<uint32_t> &colors);
+
 private:
     Ui::PalleteDialog *ui;
 };
