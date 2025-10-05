@@ -379,6 +379,9 @@
          <property name="text">
           <string>Inverse matrix</string>
          </property>
+         <property name="checkable">
+          <bool>true</bool>
+         </property>
          <property name="checked">
           <bool>false</bool>
          </property>

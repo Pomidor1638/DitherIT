@@ -176,8 +176,10 @@ void OrderedDithering::setThreshold(float t) { threshold = t; }
 int OrderedDithering::getLevel() const { return matrix.getLevel(); }
 void OrderedDithering::setLevel(int level) { matrix.setLevel(level); }
 
+bool OrderedDithering::getInvert() const { return invert; }
+void OrderedDithering::setInvert(bool i){ invert = i; }
+
 IDither* OrderedDithering::copy() const
 {
     return static_cast<IDither*>(new OrderedDithering(*this));
-
 }

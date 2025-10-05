@@ -112,6 +112,14 @@ void MainWindow::onItemSelectionChanged()
         return;
     }
 
+    // Показываем путь
+    if (outputPath.isEmpty()) {
+#ifdef _DEBUG_
+        qDebug() << "WARNING: item without output path";
+#endif
+        return;
+    }
+
     setOutputPath(outputPath);
 }
 
@@ -134,6 +142,7 @@ void MainWindow::connectSlots()
     connect(ui->orderedColorDepthSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this, &MainWindow::updateOrderedPararms);
     connect(ui->orderedLevelSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this, &MainWindow::updateOrderedPararms);
     connect(ui->orderedThresholdSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MainWindow::updateOrderedPararms);
+    connect(ui->orderedInverseMatrixFlag, &QCheckBox::toggled, this, &MainWindow::updateOrderedPararms);
 
     connect(ui->randomColorDepthSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this, &MainWindow::updateRandomPararms);
     connect(ui->randomThresholdSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MainWindow::updateRandomPararms);
@@ -260,6 +269,7 @@ void MainWindow::updateOrderedPararms()
     od->setColorDepth(ui->orderedColorDepthSpinBox->value());
     od->setThreshold(ui->orderedThresholdSpinBox->value() / 100.0f);
     od->setLevel(ui->orderedLevelSpinBox->value());
+    od->setInvert(ui->orderedInverseMatrixFlag->checkState());
 
 }
 
@@ -340,16 +350,17 @@ void MainWindow::updateCurDitherWidgets()
         ui->orderedColorDepthSpinBox->blockSignals(true);
         ui->orderedThresholdSpinBox->blockSignals(true);
         ui->orderedLevelSpinBox->blockSignals(true);
+        ui->orderedInverseMatrixFlag->blockSignals(true);
 
         ui->orderedColorDepthSpinBox->setValue(od->getColorDepth());
         ui->orderedThresholdSpinBox->setValue(od->getThreshold() * 100.0f);
         ui->orderedLevelSpinBox->setValue(od->getLevel());
-
-        qDebug() << od->getLevel();
+        ui->orderedInverseMatrixFlag->setCheckState(od->getInvert() ? Qt::Checked : Qt::Unchecked);
 
         ui->orderedColorDepthSpinBox->blockSignals(false);
         ui->orderedThresholdSpinBox->blockSignals(false);
         ui->orderedLevelSpinBox->blockSignals(false);
+        ui->orderedInverseMatrixFlag->blockSignals(false);
 
         break;
     }
